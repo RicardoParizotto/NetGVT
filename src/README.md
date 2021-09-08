@@ -24,20 +24,20 @@ Then you can type the new LVT values. The system will always return the updated 
 You can integrate NetGVT into an existing distributed simulator by importing into the simulator
 communication interface the gvt control API.
 
-# import gvtControl
+> import gvtControl
 
 Than just instatiate an gvtControl object
 
-#  GVTcontrol_instance  = gvtControl(ip_address, process_id)
+>  GVTcontrol_instance  = gvtControl(ip_address, process_id)
 
 When the process have to propose an LVT value, it can simply to call a gvtControl
 method 
 
-# GVTcontrol_instance.put(LVT)
+> GVTcontrol_instance.put(LVT)
 
 Finally, when the simulator desires to obtain a new GVT value, just get it from the GvtControl
 
-# GVTcontro_instance.get()
+> GVTcontro_instance.get()
 
 Ideally, this method will return a value only when there is a new GVT value.
 
