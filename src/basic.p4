@@ -1,4 +1,4 @@
-/*Never forget: components/processes are indexed by their id [0..n - 1]. 
+/*Never forget: components/processes are indexed by their id [0..n - 1].
 */
 
 #include <core.p4>
@@ -16,7 +16,7 @@ register<egressSpec_t>(1) primary_port;
 register<bit<32>>(1) DoChangeNumber;
 register<bit<32>>(1) LeaderId;
 
-control MyVerifyChecksum(inout headers hdr, inout metadata meta) {   
+control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
     apply {  }
 }
 
@@ -28,9 +28,9 @@ control MyIngress(inout headers hdr,
     }
 
     action answer_replica(egressSpec_t port){
-        standard_metadata.egress_spec = port;  
+        standard_metadata.egress_spec = port;
     }
-    
+
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         standard_metadata.egress_spec = port;
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
@@ -83,7 +83,7 @@ control MyIngress(inout headers hdr,
 
     table this_switch {
       key = {
-         hdr.gvt.sid: exact; 
+         hdr.gvt.sid: exact;
       }
       actions = {
         set_id;
@@ -93,7 +93,7 @@ control MyIngress(inout headers hdr,
 
     table this_switch_2 {
       key = {
-         hdr.gvt.sid: exact; 
+         hdr.gvt.sid: exact;
       }
       actions = {
         set_id;
@@ -120,7 +120,7 @@ control MyIngress(inout headers hdr,
       }
       size = 20;
     }
-    
+
     apply {
         if(hdr.gvt.isValid()){
           if( hdr.gvt.type == TYPE_FAILURE){                      /*if is a probe message just answer it */
@@ -136,7 +136,7 @@ control MyIngress(inout headers hdr,
             } else {                                              /*If the value is less or equal to the GVT we dont need to check anything, just drop it*/
               drop();
             }
-          } else if(hdr.gvt.type == TYPE_PREPAREOK){              /*if is acknoledgment message from replicas, TYPE_PREPAREOK*/  
+          } else if(hdr.gvt.type == TYPE_PREPAREOK){              /*if is acknoledgment message from replicas, TYPE_PREPAREOK*/
                 RoundControl.read( meta.numPrepareOks, hdr.gvt.round);
                 meta.numPrepareOks = meta.numPrepareOks + 1;
                 RoundControl.write (hdr.gvt.round, meta.numPrepareOks);
@@ -152,7 +152,7 @@ control MyIngress(inout headers hdr,
                this_switch.apply();                                 //attaches the switch ID into the message
                multicast(2);                                        //send a start_change for all the replicas. Multicast group is defined statically in the control plane
            } else if (hdr.gvt.type == TYPE_STARTCHANGE){
-                hdr.gvt.type = TYPE_MAKECHANGE;                   
+                hdr.gvt.type = TYPE_MAKECHANGE;
                 LeaderId.write(0, hdr.gvt.sid);                     /*update the primary ID*/
                 set_switch_dest.apply();                            //set the destination based on the incomming packet source
            } else if(hdr.gvt.type == TYPE_MAKECHANGE){
@@ -160,16 +160,16 @@ control MyIngress(inout headers hdr,
                 meta.numDoChanges = meta.numDoChanges + 1;
                 DoChangeNumber.write (0, meta.numDoChanges);
                 if(meta.numDoChanges >= MAJORITY){                      /*wait for the maximum and them sends the star view for servers*/
-                  /*TODO: we need to send a startview both for servers and then servers resend old proposals */ 
+                  /*TODO: we need to send a startview both for servers and then servers resend old proposals */
                   /*TODO: we also need to identify how to compute old values*/
-                  hdr.gvt.type = TYPE_STARTVIEW;               
+                  hdr.gvt.type = TYPE_STARTVIEW;
                   multicast(1);                                         //this multicast group does not need to change
                 }
            }
-          if(meta.iterator > 0 ){                                       /*this condition is to start the GVT computation*/ 
+          if(meta.iterator > 0 ){                                       /*this condition is to start the GVT computation*/
               if(meta.iterator == 1){                                   /*if is the first iteration*/
-                LvtValues.read(meta.minLVT, 0); 
-                GVT.read(meta.currentGVT, 0);     
+                LvtValues.read(meta.minLVT, 0);
+                GVT.read(meta.currentGVT, 0);
               }
               /*we do not consider a scenario with zero processes */
               LvtValues.read(meta.readedValue, meta.iterator);
@@ -183,16 +183,17 @@ control MyIngress(inout headers hdr,
                       hdr.gvt.type = TYPE_PREPAREOK;
                       LeaderId.read(meta.primary, 0);
                       set_primary.apply();                               //the primary is defined using the received switch id to determine an output port
-                    } else {                                             /*the other case is the hdr.gvt.value is propose*/                                          
+                    } else {                                             /*the other case is the hdr.gvt.value is propose*/
                         RoundNumber.read(meta.currentRound, 0);          /*append round number to the header and reset the history of PREPAREOKS*/
                         RoundNumber.write(0, meta.currentRound + 1);
                         hdr.gvt.round = meta.currentRound + 1;
                         hdr.gvt.type = TYPE_PREPARE;
-                        this_switch_2.apply();  
+                        this_switch_2.apply();
                         multicast(2);                                    /*send for replicas*/
                     }
               } else {
-                resubmit(meta); 
+                //resubmit(meta);
+                meta.mark_to_resub = 1;
               }
           }
         }
@@ -207,7 +208,10 @@ control MyIngress(inout headers hdr,
 control MyEgress(inout headers hdr,
                  inout metadata meta,
                  inout standard_metadata_t standard_metadata) {
-    apply {    } 
+    apply {
+          if(meta.mark_to_resub==1)
+          recirculate_preserving_field_list(0);
+    }
 }
 
 control MyComputeChecksum(inout headers hdr, inout metadata meta) {

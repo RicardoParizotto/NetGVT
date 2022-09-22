@@ -27,7 +27,7 @@ typedef bit<32> ip4Addr_t;
 /*GVT definitions*/
 typedef bit<32> lpid_t;
 typedef bit<32> value_t;
-//typedef bit<32> round_t;  
+//typedef bit<32> round_t;
 
 header ethernet_t {
     macAddr_t dstAddr;
@@ -55,7 +55,7 @@ header gvt_t{
     bit<32> type;
     value_t value;
     lpid_t  pid;
-    bit<32> round; 
+    bit<32> round;
     bit<32> sid;
 }
 
@@ -75,11 +75,12 @@ struct metadata {
     bit<32> currentRound;
     egressSpec_t out_aux;
     bit<32> primary;
+    bit<32> mark_to_resub;
 }
 
 struct headers {
     ethernet_t     ethernet;
     ipv4_t             ipv4;
     gvt_t               gvt;
-    viewchange_t[TOTAL_NUMBER_OF_PROCESSES]  viewchange;  
+    viewchange_t[TOTAL_NUMBER_OF_PROCESSES]  viewchange;
 }
