@@ -5,8 +5,8 @@ import socket
 import random
 import struct
 import threading
-import time 
-import thread
+import time
+import _thread
 
 from scapy.all import sendp, send, get_if_list, get_if_hwaddr
 from scapy.all import Packet
@@ -29,7 +29,7 @@ TYPE_RESENDPROP = 0x1919
 
 class gvtControl:
     def __init__(self, dest_ip, pid):
-        #creates socket to a destination 
+        #creates socket to a destination
         self.addr = socket.gethostbyname(dest_ip)
         self.iface = self.get_if()
         self.pid = pid
@@ -43,7 +43,7 @@ class gvtControl:
 
         self.queue = []
 
-        self.lock_alive = thread.allocate_lock()
+        self.lock_alive = _thread.allocate_lock()
 
         #gambia. One process start the synchronization.
         self.start_synchronization()
@@ -63,6 +63,9 @@ class gvtControl:
         self.send = threading.Thread(target=self.send_queue)
         self.send.start()
 
+        self.sendagain = threading.Thread(target=self.sendAgain)
+        self.sendagain.start()
+
     def start_synchronization(self):
         #this not right. A separeted process should init that.
         if(self.pid == 1):
@@ -74,7 +77,7 @@ class gvtControl:
     def receiveThread(self):
         #ifaces = filter(lambda i: 'eth' in i, os.listdir('/sys/class/net/'))
         #iface = ifaces[0]
-        print "sniffing on %s" % self.iface
+        print(("sniffing on %s" % self.iface))
         sys.stdout.flush()
         sniff(iface = self.iface, prn = lambda x: self.handle_pkt(x))
         #TODO: Change this interface after the failure
@@ -84,12 +87,12 @@ class gvtControl:
             #print "receive"
             if pkt[GvtProtocol].flag == TYPE_DEL:              #delivering new GVT value for the server
                 self.GVT_value = pkt[GvtProtocol].value
-                print "got new value: " + str(self.GVT_value)
-                print "time: " + str(time.time() - self.last_proposal_time)
+                print(("got new value: " + str(self.GVT_value)))
+                print(("time: " + str(time.time() - self.last_proposal_time)))
                 #acknowledges the message
-                if self.GVT_value == self.sent_but_not_yet_acknowledged and pkt[GvtProtocol].pid == self.pid :
+                if pkt[GvtProtocol].pid == self.pid :
                     self.sent_but_not_yet_acknowledged = 0
-                #what should i do with this new value    
+                #what should i do with this new value
 
             elif pkt[GvtProtocol].flag == TYPE_DELFAILURE:   #this is a PONG! Primary is Alive bb!
                 #print "pong"
@@ -105,7 +108,7 @@ class gvtControl:
         sys.stdout.flush()
 
     def change_interface(self):
-        print('PRIMARY TIMEOUT!!!' + str(self.ifs))
+        print(('PRIMARY TIMEOUT!!!' + str(self.ifs)))
         for i in self.ifs:
             if i:
                 self.iface = i
@@ -130,11 +133,11 @@ class gvtControl:
                 iface=i
                 break;
         if not iface:
-            print "Cannot find eth0 interface"
+            print("Cannot find eth0 interface")
             exit(1)
         self.ifs.remove('lo')
         self.ifs.remove('eth0')
-        print(self.ifs)
+        print((self.ifs))
         return iface
 
     def send_packet(self, flag_operation, message_value, process_pid):
@@ -147,11 +150,12 @@ class gvtControl:
         self.last_proposal = int(proposal_value)
         self.send_packet(flag_operation=TYPE_PROP, message_value=int(proposal_value), process_pid=self.pid)
 
-    #this thread implements a run loop. Just for writing LVT values as a debug functionality 
+
+    #this thread implements a run loop. Just for writing LVT values as a debug functionality
     def runThread(self):
         while True:
-            value = input('Type new LVT:')
-            print "sending on interface %s to %s" % (self.iface, str(self.addr))
+            value = eval(input('Type new LVT:'))
+            print(("sending on interface %s to %s" % (self.iface, str(self.addr))))
             #TODO: We need to enforce the concurrency control here
             self.queue.append([value, time.time()])
             #self.last_proposal_time = time.time()
@@ -169,13 +173,13 @@ class gvtControl:
                 #print "ping"
             else:
                 #trigger recovery...
-                elf.change_interface() 
+                elf.change_interface()
                 self.leader_alive = 1 #necessario para nao entrar nessa condicao logo que o novo leader e escolhido
                 #envia pacote de start changeS
                 print("ACORDA OME")
                 pkt =  Ether(src=get_if_hwaddr(self.iface), dst='ff:ff:ff:ff:ff:ff', type = TYPE_GVT)
                 pkt = pkt / GvtProtocol(flag = TYPE_VIEWCHANGE, value=0, pid= self.pid)
-                sendp(pkt, iface=self.iface, verbose=False) 
+                sendp(pkt, iface=self.iface, verbose=False)
             self.lock_alive.release()
 
     def send_queue(self):
@@ -185,14 +189,21 @@ class gvtControl:
             if(self.sent_but_not_yet_acknowledged == 0 and len(self.queue) > 0):
                 get = self.queue.pop(0)
                 self.sent_but_not_yet_acknowledged = get[0]
-                print self.sent_but_not_yet_acknowledged
+                print((self.sent_but_not_yet_acknowledged))
                 self.last_proposal_time = get[1]
-                self.build_proposal(proposal_value=self.sent_but_not_yet_acknowledged)          
+                self.build_proposal(proposal_value=self.sent_but_not_yet_acknowledged)
 
-def main():    
+    def sendAgain(self):
+        while True:
+            time.sleep(1)
+            if(self.sent_but_not_yet_acknowledged and self.sent_but_not_yet_acknowledged == self.last_proposal):
+                if (time.time() - self.last_proposal_time) > 4:
+                    self.send_packet(flag_operation=TYPE_PROP, message_value=int(self.sent_but_not_yet_acknowledged), process_pid=self.pid)
+
+def main():
     if len(sys.argv)<3:
-        #TODO: Does not make sense this Dest IP. Solve it 
-        print 'pass 2 arguments: <destination_ip> <pid>'
+        #TODO: Does not make sense this Dest IP. Solve it
+        print('pass 2 arguments: <destination_ip> <pid>')
         exit(1)
 
     GVTcontrol_instance = gvtControl(sys.argv[1], int(sys.argv[2]))

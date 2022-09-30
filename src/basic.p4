@@ -16,6 +16,8 @@ register<egressSpec_t>(1) primary_port;
 register<bit<32>>(1) DoChangeNumber;
 register<bit<32>>(1) LeaderId;
 
+register<bit<32>>(1) failure_simulation;
+
 control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
     apply {  }
 }
@@ -208,9 +210,17 @@ control MyIngress(inout headers hdr,
 control MyEgress(inout headers hdr,
                  inout metadata meta,
                  inout standard_metadata_t standard_metadata) {
+                 action drop() {
+                     mark_to_drop(standard_metadata);
+                 }
+
+
     apply {
           if(meta.mark_to_resub==1)
           recirculate_preserving_field_list(0);
+          if( hdr.gvt.type !=  TYPE_DELFAILURE){
+          failure_simulation.read(meta.failure, 0);
+          if(meta.failure == 1) drop();}
     }
 }
 

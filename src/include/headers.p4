@@ -76,6 +76,7 @@ struct metadata {
     egressSpec_t out_aux;
     bit<32> primary;
     bit<32> mark_to_resub;
+    bit<32> failure;
 }
 
 struct headers {
